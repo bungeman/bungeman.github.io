@@ -1,0 +1,393 @@
+<style>
+code {white-space:pre;background: #eee;}
+code.block {display:block;overflow-x:scroll;margin:1em;}
+</style>
+
+<h1>Higher Order Interpolation of OpenType variable fonts</h1>
+
+
+<h2>Preliminary</h2>
+
+
+<p>
+Quadratic bezier curves are used in the following examples, but any degree bezier should work.
+However, high degree curves are difficult to tweak and can run into issues with numerical stability in implementations.
+</p>
+
+<p>A quadratic bezier curve with control points <code>P0</code>, <code>P1</code>, <code>P2</code> can be described as
+<code class="block">
+C(t) = (P0 - 2P1 + P2)t<sup>2</sup> + 2(P1 - P0)t + P0
+</code>
+</p>
+
+<p>A contour of beziers is a vector of bezier curves with <code>C[n].PN == C[n+1].P0</code>.</p>
+
+<p>
+Non-linear interpolation takes advantage of the fact that "The overall scalar is the product of all per-axis scalars."
+When a range is defined on more than one axis the per-axis scalars (abbreviated <code>AS</code>, have values on the range <code>[0, 1]</code>) are multiplied together to create the overall scalar which will be multiplied by the deltas.
+If a range is defined along <code>axis0, axis1, ..., axisN</code> and all the axis values vary so as to approach the peak at the same rate so that <code>AS1 == AS2 == ... == ASN</code>, then the deltas will be multiplied by <code>AS0*AS1*...*ASN == AS0^N</code>.
+</p>
+<p>
+Making the axis values all approach the peak at the same rate is easiest to accomplish if all the axes of the region have the same near, far, and peak values.
+One possible way to vary the axes together is to give them all the same axis tag, which works because internally the axes are stored as a list of axes and each axis has a tag.
+Specifying a variation value by axis tag applies the variation value to all axes with that axis tag in all current major implementations.
+While this is not currently required by the specification, this is the only addition to the specification used here<a href="#footnote1">[1]</a>.
+Since quadratic beziers are used in the examples, the examples will be using two axes locked together to create the t<sup>2</sup> and t terms required.
+</p>
+
+
+<h2>First attempt</h2>
+
+
+<p>Since ranges must peak at a single point constants other than zero are difficult, so re-write <code>P0</code> as <code>P0t + P0(1-t)</code>.
+<code class="block">
+C(t) = (P0 - 2P1 + P2)t<sup>2</sup> + (2P1 - P0)t + P0(1-t)
+</code>
+</p>
+<p>
+To translate this into regions, create three regions where 'begin' is where the curve begins (closest to axis origin) and 'end' is where the curve ends (furthest from axis origin)
+<code class="block">
+C.region[0] = { axes = [axis1]       , near = begin, far = end, peak = begin, delta = (           P0) }
+C.region[1] = { axes = [axis1]       , near = begin, far = end, peak = end  , delta = (     2P1 - P0) }
+C.region[2] = { axes = [axis1, axis2], near = begin, far = end, peak = end  , delta = (P2 - 2P1 + P0) }
+</code>
+</p>
+<p>
+The resources required are one axis per degree of curve and one region per curve per degree of curve plus one.
+A maximum of three regions are active at once per curve, so six regions at the point of overlap (which is bad).
+</p>
+
+<h3>Example</h3>
+<p>
+A not great but easy to understand approximation of a half circle in a square using two quads is to put the on-curve points in the middle of the edges and the off-curve points in the corners.
+This example starts with the left point of the half circle approximation at the origin and has it travel clockwise (font space being y-up) in the negative axis direction.
+
+<code class="block">
+C[0].P = [(   0,    0), (   0,  512), ( 512,  512)]
+C[1].P = [( 512,  512), (1024,  512), (1024,    0)]
+</code>
+</p>
+<p>
+Plugging in the numbers for the example
+<code class="block">
+C[0].region[0].delta  x =    0  y =    0
+C[0].region[1].delta  x =    0  y = 1024
+C[0].region[2].delta  x =  512  y = -512
+
+C[1].region[0].delta  x =  512  y =  512
+C[1].region[1].delta  x = 1536  y =  512
+C[1].region[2].delta  x = -512  y = -512
+</code>
+</p>
+<p>
+Applying the curves evenly, translating this into ttx notation, and naming the first axis <code>wght</code> and the second <code>WGHT</code> produces the following example.
+The ttx format uses the gx term 'tuple' for what is here and in the OpenType specification referred to as a region.
+Currently ttx keys axes by tag and not by index, making it less capable than the underlying format, so give the axes different tags.
+After compiling with ttx, open with a hex editor and replace <code>WGHT</code> with <code>wght</code>.
+<code class="block">
+  &lt;fvar&gt;  
+    &lt;Axis&gt;
+      &lt;AxisTag&gt;wght&lt;/AxisTag&gt;
+      &lt;Flags&gt;0x1&lt;/Flags&gt;
+      &lt;MinValue&gt;400&lt;/MinValue&gt;
+      &lt;DefaultValue&gt;500&lt;/DefaultValue&gt;
+      &lt;MaxValue&gt;900&lt;/MaxValue&gt;
+      &lt;AxisNameID&gt;256&lt;/AxisNameID&gt;
+    &lt;/Axis&gt;
+
+    &lt;Axis&gt;
+      &lt;AxisTag&gt;WGHT&lt;/AxisTag&gt;
+      &lt;Flags&gt;0x1&lt;/Flags&gt;
+      &lt;MinValue&gt;400&lt;/MinValue&gt;
+      &lt;DefaultValue&gt;500&lt;/DefaultValue&gt;
+      &lt;MaxValue&gt;900&lt;/MaxValue&gt;
+      &lt;AxisNameID&gt;256&lt;/AxisNameID&gt;
+    &lt;/Axis&gt;
+  &lt;/fvar&gt;
+  &lt;gvar&gt;
+    &lt;glyphVariations glyph="foo"&gt;
+      &lt;!-- curves heading in the negative axis direction from the origin (default point) --&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="-0.5" min="-0.5" max="0"/&gt;
+        &lt;delta pt="0" x="0" y="1024"/&gt;
+      &lt;/tuple&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="-0.5" min="-0.5" max="0"/&gt;
+        &lt;coord axis="WGHT" value="-0.5" min="-0.5" max="0"/&gt;
+        &lt;delta pt="0" x="512" y="-512"/&gt;
+      &lt;/tuple&gt;
+
+     &lt;tuple&gt;
+        &lt;coord axis="wght" value="-0.5" min="-1.0" max="-0.5"/&gt;
+        &lt;delta pt="0" x="512" y="512"/&gt;
+      &lt;/tuple&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="-1.0" min="-1.0" max="-0.5"/&gt;
+        &lt;delta pt="0" x="1536" y="512"/&gt;
+      &lt;/tuple&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="-1.0" min="-1.0" max="-0.5"/&gt;
+        &lt;coord axis="WGHT" value="-1.0" min="-1.0" max="-0.5"/&gt;
+        &lt;delta pt="0" x="-512" y="-512"/&gt;
+      &lt;/tuple&gt;
+    &lt;/glyphVariations&gt;
+  &lt;/gvar&gt;
+</code>
+</p>
+
+<h3>Considerations</h3>
+<p>
+Unfortunately, attempting to contruct a contour with consecutive curves <code>C[n]</code> and <code>C[n+1]</code> with the common point <code>Pc == C[n].PN == C[n+1].P0</code> the offset <code>Pc</code> will be double applied where the two contours overlap, resulting in a discontinuity.
+Offsetting the constant term or all of <code>C[n+1]</code> by an ULP (1 / 2<sup>14</sup>) may somewhat mitigate, but can still give rise to a discontinuity as the application may allow setting the variation more finely than the ULP available.
+</p>
+
+
+<h2>Second attempt</h2>
+
+
+<p>The general idea is to avoid discontinuity by assuming a single contour <code>C[0..N]</code> instead of arbitrary curves (G0 continuity) to avoid constants.</p>
+<p>
+A curve <code>C</code> is applied from near position to peak position as <code>C(t)</code> and fades out from peak position to the far position as <code>C(1-t)</code>.
+In order to preserve the offset <code>C(1)</code> over the period <code>C(1-t)</code> is applied one must add in addition <code>C' = C(1) - C(1-t)</code>. (<code>C'</code> here may be pronounced "C compliment".)
+This can be interpreted as taking the initial curve </code>C</code>, reversing it, negating that, then translating that by </code>C(1)</code> to re-align.
+</p>
+<p>
+For brevity in the following block, all <code>Pn</code> are <code>C.Pn</code> (the points in the order of the original curve <code>C</code>).
+<code class="block">
+ C  (t) = ( P0 - 2P1 + P2)t<sup>2</sup> + 2( P1 - P0)t + P0
+ Cr (t) = ( P2 - 2P1 + P0)t<sup>2</sup> + 2( P1 - P2)t + P2          //        C(1-t), or C in reverse, or "delta applied as C moves from peak to the far position"
+-Cr (t) = (-P2 + 2P1 - P0)t<sup>2</sup> + 2(-P1 + P2)t - P2          //      - C(1-t), or arithmetic inverse of Cr
+ C' (t) = (-P2 + 2P1 - P0)t<sup>2</sup> + 2(-P1 + P2)t               // C(1) - C(1-t), or add C(1) = (C.P2) to -Cr
+
+ C' (t) = (-P2 + 2P1 - P0)t<sup>2</sup> + 2(-P1 + P2)t
+ C'r(t) = (-P0 + 2P1 - P2)t<sup>2</sup> + 2(-P1 + P0)t + ( P2 - P0)  //         C'(1-t)
+-C'r(t) = ( P0 - 2P1 + P2)t<sup>2</sup> + 2( P1 - P0)t + (-P2 + P0)  //       - C'(1-t)
+ C''(t) = ( P0 - 2P1 + P2)t<sup>2</sup> + 2( P1 - P0)t               // C'(1) - C'(1-t)
+
+ Co (t) = ( P0 - 2P1 + P2)t<sup>2</sup> + 2( P1 - P0)t               // The curve C(t) translated to the origin, or C(t) - C.P0
+ Cor(t) = ( P2 - 2P1 + P0)t<sup>2</sup> + 2( P1 - P2)t + ( P2 - P0)  //          Cor(1-t)
+-Cor(t) = (-P2 + 2P1 - P0)t<sup>2</sup> + 2(-P1 + P2)t + (-P2 + P0)  //        - Cor(1-t)
+ Co'(t) = (-P2 + 2P1 - P0)t<sup>2</sup> + 2(-P1 + P2)t               // Cor(1) - Cor(1-t)
+</code>
+<ul>
+<li><code>C </code> fades as <code>Cr </code> which is complimented by <code>C'</code>.</li>
+<li><code>C'</code> fades as <code>C'r</code> which is complimented by <code>C'' == Co</code>.</li>
+<li><code>Co</code> fades as <code>Cor</code> which is complimented by <code>Co' == C'</code>.</li>
+</ul>
+Importantly, neither of <code>Co</code> or <code>C'</code> has a constant term.
+</p>
+
+<p>
+Without loss of generality, assume <code>C[0].P0 = (0,0)</code> so that <code>C[0] == Co[0]</code>.
+If a discontinuous offset is desired, a <code>Pt + P(1-t)</code> constant delta region (or any shaped region) can be added across the contour (or wherever for that matter).
+To avoid double applications or holes two non-zero offsets cannot be next to each other.
+Often hard discontinuity can be avoided by allowing contours extremely fast applying curves.
+Note that the math can be made to work out for the case with <code>C[0] != Co[0]</code>, but it's messy and one is left with many out of phase sawtooth regions eating into the region limit to provide the constant offset.
+</p>
+<p>
+<code>C[0]</code> is applied from where it starts to <code>C[0].peak</code> as <code>Co[0](t)</code>. It then phases out to the <code>C[1].peak</code> as <code>Co[0](1-t) == Cr[0](t)</code>. 
+Subsequent curves in the contour may be followed with regions described by
+<ul>
+<li><code>C[n].near</code> at <code>C[n-1].peak</code></li>
+<li><code>C[n].far</code> at <code>C[n+1].peak</code></li>
+<li><code>C[n].peak</code> where ever the curve should be fully applied (the logical end of the curve)</li>
+<li>adding <code>C[n-1](1) - C[n-1](1-t) == C'[n-1]</code> to preserve the offset <code>C[n-1].PN == C[n].P0 == C[n-1](1) == C[n](0)</code> over the range the previous region is providing <code>C[n-1](1-t) == Cr[n-1](t)</code>.</li>
+<li>adding <code>Co[n]</code></li>
+</ul>
+<code>C[N]</code> works the same way except that <code>C[N].far == C[N].peak</code>.
+</p>
+<p>
+The first line of the following factorings is the <code>C[n-1](1-t) == Cr[n-1](t)</code> of the previous curve being 'unapplied', <code>Cu[n]</code>.
+The second line of the following factorings is the <code>C[n-1](1) - C[n-1](1-t) + Co[n]</code> term for the current curve to be 'applied', <code>Ca[n]</code>.
+<code class="block">
+C[0]   == 
+          Co [0]
+
+C[1]   == Cor[0] +
+          C' [0] + Co [1]
+        
+C[2]   == C'r[0] + Cor[1] +
+          Co [0] + C' [1] + Co [2]
+        
+C[3]   == Cor[0] + C'r[1] + Cor[2] +
+          C' [0] + Co [1] + C' [2] + Co [3]
+        
+C[n+2] == C'r[n] + Cor[n+1] +
+          C  [n] + C' [n+1] + Co[n+2]
+</code>
+
+The Ca curves describe the deltas to apply C.
+<code class="block">
+Ca[0] = Co[0]
+Ca[1] = C'[0]   + Co[1]
+Ca[2] = Co[0]   + C'[1]   + Co[2]
+Ca[3] = C'[0]   + Co[1]   + C'[2] + Co[3]
+Ca[n] = Ca[n-2] + C'[n-1] + Co[n]
+</code>
+</p>
+      
+<p>
+Since Ca has no constant term, the resources required are one axis per degree of curve and one region per curve per degree of curve.
+A maximum of six regions are active at once (at a middle peak, but at that point two of them are zero).
+</p>
+
+
+<h3>Example</h3>
+<p>
+A not great but easy to understand approximation of a circle in a square using four quads is to put the on-curve points in the middle of the edges and the off-curve points in the corners.
+This example starts with the left point of the circle approximation at the origin and has it travel counter-clockwise (font space being y-up) in the positive axis direction.
+
+<code class="block">
+C [0].P = [(   0,    0), (   0, -512), ( 512, -512)]
+C [1].P = [( 512, -512), (1024, -512), (1024,    0)]
+C [2].P = [(1024,    0), (1024,  512), ( 512,  512)]
+C [3].P = [( 512,  512), (   0,  512), (   0,    0)]
+</code>
+
+<code class="block">
+Co[0].P = [(0, 0), (   0, -512), ( 512, -512)]
+Co[1].P = [(0, 0), ( 512,    0), ( 512,  512)]
+Co[2].P = [(0, 0), (   0,  512), (-512,  512)]
+Co[3].P = [(0, 0), (-512,    0), (-512, -512)]
+</code>
+</p>
+
+<p>
+For ease of calculation note that since <code>Co.P0 == 0</code>
+<code class="block">
+Co (t) = (Co.P0 - 2Co.P1 + Co.P2)t<sup>2</sup> + 2(Co.P1 - Co.P0)t + Co.P0
+       = (Co.P2 - 2Co.P1)t<sup>2</sup> + 2(Co.P1)t
+    
+Co'(t) = (-Co.P2 + 2Co.P1 - Co.P0)t<sup>2</sup> + 2(-Co.P1 + Co.P2)t 
+       = (-Co.P2 + 2Co.P1)t<sup>2</sup> + 2(Co.P2 - Co.P1)t
+</code>
+      
+Note that this statement of <code>Co' != C'</code> since it assumes <code>Co.P0 == 0</code> and the original <code>C'</code> does not assume <code>C.P0 == 0</code>.
+However since this was already assumed when factoring <code>C</code> into <code>Cu + Ca</code> we can use this <code>Co'(t)</code> in place of <code>C'</code> for calculating <code>Ca</code>.
+</p>
+<p>
+Plugging in the numbers for the example
+<code class="block">
+Co[0](t) x =   512t<sup>2</sup> +     0t  y =  512t<sup>2</sup> + -1024t
+C'[0](t) x =  -512t<sup>2</sup> +  1024t  y = -512t<sup>2</sup> +     0t
+
+Co[1](t) x =  -512t<sup>2</sup> +  1024t  y =  512t<sup>2</sup> +     0t
+C'[1](t) x =   512t<sup>2</sup> +     0t  y = -512t<sup>2</sup> +  1024t
+
+Co[2](t) x =  -512t<sup>2</sup> +     0t  y = -512t<sup>2</sup> +  1024t
+C'[2](t) x =   512t<sup>2</sup> + -1024t  y =  512t<sup>2</sup> +     0t
+
+Co[3](t) x =   512t<sup>2</sup> + -1024t  y = -512t<sup>2</sup> +     0t
+</code>
+<code class="block">
+Ca[0](t) x =   512t<sup>2</sup> +     0t  y =  512t<sup>2</sup> + -1024t
+Ca[1](t) x = -1024t<sup>2</sup> +  2048t  y =    0t<sup>2</sup> +     0t
+Ca[2](t) x =   512t<sup>2</sup> +     0t  y = -512t<sup>2</sup> +  1024t
+Ca[3](t) x =     0t<sup>2</sup> +     0t  y =    0t<sup>2</sup> +     0t
+</code>
+</p>
+<p>
+Applying the curves evenly, translating this into ttx notation, and naming the first axis <code>wght</code> and the second <code>WGHT</code> produces the following example.
+The ttx format uses the gx term 'tuple' for what is here and in the OpenType specification referred to as a region.
+Currently ttx keys axes by tag and not by index, making it less capable than the underlying format, so give the axes different tags.
+After compiling with ttx, open with a hex editor and replace <code>WGHT</code> with <code>wght</code>.
+<code class="block">
+  &lt;fvar&gt;  
+    &lt;Axis&gt;
+      &lt;AxisTag&gt;wght&lt;/AxisTag&gt;
+      &lt;Flags&gt;0x1&lt;/Flags&gt;
+      &lt;MinValue&gt;400&lt;/MinValue&gt;
+      &lt;DefaultValue&gt;500&lt;/DefaultValue&gt;
+      &lt;MaxValue&gt;900&lt;/MaxValue&gt;
+      &lt;AxisNameID&gt;256&lt;/AxisNameID&gt;
+    &lt;/Axis&gt;
+
+    &lt;Axis&gt;
+      &lt;AxisTag&gt;WGHT&lt;/AxisTag&gt;
+      &lt;Flags&gt;0x1&lt;/Flags&gt;
+      &lt;MinValue&gt;400&lt;/MinValue&gt;
+      &lt;DefaultValue&gt;500&lt;/DefaultValue&gt;
+      &lt;MaxValue&gt;900&lt;/MaxValue&gt;
+      &lt;AxisNameID&gt;256&lt;/AxisNameID&gt;
+    &lt;/Axis&gt;
+  &lt;/fvar&gt;
+  &lt;gvar&gt;
+    &lt;glyphVariations glyph="foo"&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="0.25" min="0" max="0.5"/&gt;
+        &lt;coord axis="WGHT" value="0.25" min="0" max="0.5"/&gt;
+        &lt;delta pt="0" x="512" y="512"/&gt;
+      &lt;/tuple&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="0.25" min="0" max="0.5"/&gt;
+        &lt;delta pt="0" x="0" y="-1024"/&gt;
+      &lt;/tuple&gt;
+
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="0.5" min="0.25" max="0.75"/&gt;
+        &lt;coord axis="WGHT" value="0.5" min="0.25" max="0.75"/&gt;
+        &lt;delta pt="0" x="-1024" y="0"/&gt;
+      &lt;/tuple&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="0.5" min="0.25" max="0.75"/&gt;
+        &lt;delta pt="0" x="2048" y="0"/&gt;
+      &lt;/tuple&gt;
+
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="0.75" min="0.5" max="1.0"/&gt;
+        &lt;coord axis="WGHT" value="0.75" min="0.5" max="1.0"/&gt;
+        &lt;delta pt="0" x="512" y="-512"/&gt;
+      &lt;/tuple&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="0.75" min="0.5" max="1.0"/&gt;
+        &lt;delta pt="0" x="0" y="1024"/&gt;
+      &lt;/tuple&gt;
+
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="1.0" min="0.75" max="1.0"/&gt;
+        &lt;delta pt="0" x="0" y="0"/&gt;
+      &lt;/tuple&gt;
+      &lt;tuple&gt;
+        &lt;coord axis="wght" value="1.0" min="0.75" max="1.0"/&gt;
+        &lt;coord axis="WGHT" value="1.0" min="0.75" max="1.0"/&gt;
+        &lt;delta pt="0" x="0" y="0"/&gt;
+      &lt;/tuple&gt;
+    &lt;/glyphVariations&gt;
+  &lt;/gvar&gt;
+</code>
+</p>
+
+<h3>Considerations</h3>
+<p>
+For brevity this example moves a single point along a contour.
+If there are multiple points moving along different curves but the curves are applied over the same regions of axis space then those curves can share regions.
+From a simplified editing perspective this is probably easiest to understand as having a 'master' at each point along the diagonal of the axes where a bezier begins/ends, allowing non-linear interpolation for each of the deltas.
+If just moving many points as rigid body the <code>IUP</code> like compression of the deltas means only needing to mention a single point.
+Also, it is possible to construct a component glyph which specifies attachement points of multiple variable glyphs in order to compose curves across multiple glyphs.
+</p>
+<p>
+This example also only considers the <code>[0,1]</code> side of the axis, but uses the terms <code>near</code> and <code>far</code> instead of <code>min</code> and <code>max</code> to suggest how contours on the <code>[0,-1]</code> side are constructed.
+Such contours can be constructed by starting at the origin (zero delta) and go the other way.
+</p>
+<p>Constants outside the curve can be faked by limiting the min and max values of the axis in the fvar table and then allowing (or expecting) the user to attempt values outside that range, which will be clamped.</p>
+
+
+<h2>Example</h2>
+
+
+<p>
+A font with these curves example curves applied to some glyphs can be had from <a href="VaryAlongQuad.ttf">VaryAlongQuad.ttf</a>.
+It is most instructive to view this font in <a href="https://www.axis-praxis.org/samsa/">Samsa</a>.
+</p>
+
+
+<h2>Footnotes</h2>
+
+
+<ol>
+<li id="footnote1">
+Technically the specification would probably also want all axes with the same tag to have the same min, max, and default as well.
+Someone might find some sneaky use for these not being the same, so one proposal is to require all but one axis with a given axis tag to be marked hidden so APIs know which one to use to report the min, max, and default values.
+However here they are all given the same values.
+</li>
+</ol>
