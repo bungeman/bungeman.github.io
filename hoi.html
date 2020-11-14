@@ -137,7 +137,7 @@ After compiling with ttx, open with a hex editor and replace <code>WGHT</code> w
 
 <h3>Considerations</h3>
 <p>
-Unfortunately, attempting to contruct a contour with consecutive curves <code>C[n]</code> and <code>C[n+1]</code> with the common point <code>Pc == C[n].PN == C[n+1].P0</code> the offset <code>Pc</code> will be double applied where the two contours overlap, resulting in a discontinuity.
+Unfortunately, attempting to construct a contour with consecutive curves <code>C[n]</code> and <code>C[n+1]</code> with the common point <code>Pc == C[n].PN == C[n+1].P0</code> the offset <code>Pc</code> will be double applied where the two contours overlap, resulting in a discontinuity.
 Offsetting the constant term or all of <code>C[n+1]</code> by an ULP (1 / 2<sup>14</sup>) may somewhat mitigate, but can still give rise to a discontinuity as the application may allow setting the variation more finely than the ULP available.
 </p>
 
@@ -363,13 +363,17 @@ For brevity this example moves a single point along a contour.
 If there are multiple points moving along different curves but the curves are applied over the same regions of axis space then those curves can share regions.
 From a simplified editing perspective this is probably easiest to understand as having a 'master' at each point along the diagonal of the axes where a bezier begins/ends, allowing non-linear interpolation for each of the deltas.
 If just moving many points as rigid body the <code>IUP</code> like compression of the deltas means only needing to mention a single point.
-Also, it is possible to construct a component glyph which specifies attachement points of multiple variable glyphs in order to compose curves across multiple glyphs.
+Also, it is possible to construct a component glyph which specifies attachment points of multiple variable glyphs in order to compose curves across multiple glyphs.
 </p>
 <p>
 This example also only considers the <code>[0,1]</code> side of the axis, but uses the terms <code>near</code> and <code>far</code> instead of <code>min</code> and <code>max</code> to suggest how contours on the <code>[0,-1]</code> side are constructed.
 Such contours can be constructed by starting at the origin (zero delta) and go the other way.
 </p>
-<p>Constants outside the curve can be faked by limiting the min and max values of the axis in the fvar table and then allowing (or expecting) the user to attempt values outside that range, which will be clamped.</p>
+<p>Constants outside the curve can be faked by limiting the <code>min</code> and <code>max</code> values of the axis in the <code>fvar</code> table and then allowing (or expecting) the user to attempt values outside that range, which will be clamped.</p>
+<p>
+This method admits contours with curves of various degree.
+While interesting for specifying a contour, generally the number of regions for <code>C[n]</code> will be <code>max{deg(C[n]), deg(C[n-1], ..., deg(C[0])}</code> since <code>Ca[n]</code> depends on all previous curves.
+</p>
 
 
 <h2>Example</h2>
