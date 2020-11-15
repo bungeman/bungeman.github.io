@@ -39,7 +39,7 @@ Since quadratic beziers are used in the examples, the examples will be using two
 <h2>First attempt</h2>
 
 
-<p>Since ranges must peak at a single point constants other than zero are difficult, so re-write <code>P0</code> as <code>P0t + P0(1-t)</code>.
+<p>Since ranges must peak at a single point, constants other than zero are difficult. So re-write <code>P0</code> as <code>P0t + P0(1-t)</code>.
 <code class="block">
 C(t) = (P0 - 2P1 + P2)t<sup>2</sup> + (2P1 - P0)t + P0(1-t)
 </code>
@@ -53,8 +53,8 @@ C.region[2] = { axes = [axis1, axis2], near = begin, far = end, peak = end  , de
 </code>
 </p>
 <p>
-The resources required are one axis per degree of curve and one region per curve per degree of curve plus one.
-A maximum of three regions are active at once per curve, so six regions at the point of overlap (which is bad).
+The number of axes required is <code>deg(C)</code>. The number of regions required is <code>deg(C)+1</code> for each curve.
+At most points on a contour <code>deg(C)+1</code> regions are active, with <code>2(deg(C)+1)</code> regions active at any point of curve overlap (including where curves abut, which is bad).
 </p>
 
 <h3>Example</h3>
@@ -227,8 +227,13 @@ Ca[n] = Ca[n-2] + C'[n-1] + Co[n]
 </p>
       
 <p>
-Since <code>Ca</code> has no constant term, the resources required are one axis per degree of curve and one region per curve per degree of curve.
-A maximum of six regions are active at once (at a middle peak, but at that point two of them are zero).
+The number of axes required is <code>max{deg(C[0]), deg(C[1]), ..., deg(C[N])}</code>.
+Since <code>Ca</code> has no constant term, there is no need to use a region to support a constant term.
+The number of regions for <code>C[n]</code> will be <code>max{deg(C[n]), deg(C[n-1], ..., deg(C[0])}</code> since <code>Ca[n]</code> depends on all previous curves.
+Consider the maximal case where all curves have the same degree <code>D = deg(C[0])</code>.
+At the point <code>C[N](1)</code> or while <code>C[0]</code> is being applied <code>D</code> regions are active.
+At most other points <code>2D</code> regions are active.
+At middle peak points, depending on how the implementation treats edges, either <code>D</code> or <code>3D</code> regions will be active (though <code>2D</code> of those will contribute zero delta at that point).
 </p>
 
 
