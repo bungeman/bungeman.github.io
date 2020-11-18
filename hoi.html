@@ -387,6 +387,10 @@ While interesting for specifying a contour, generally the number of regions for 
 <p>
 A font with the example curves from the first and second attempt applied to some glyphs can be had from <a href="VaryAlongQuad.ttf">VaryAlongQuad.ttf</a>.
 It is most instructive to view this font in <a href="https://www.axis-praxis.org/samsa/">Samsa</a>.
+Note that this font has the example curves from both the first and second attempt.
+The part of this font derived from the first attempt (user axis values less than 500) will have an odd discontinuous jump between curves on the contour which will show up at user axis value 450 (mapped to internal axis value -0.5).
+This discontinuous jump (and avoiding too many active regions at once) is the motivation for doing all the math in the second attempt.
+The part of this font derived from the second attempt (user axis values greater than 500) will transition between the curves on the contour smoothly.
 </p>
 
 
