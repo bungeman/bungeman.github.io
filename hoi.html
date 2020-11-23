@@ -26,6 +26,7 @@ C(t) = (P0 - 2P1 + P2)t<sup>2</sup> + 2(P1 - P0)t + P0
 Non-linear interpolation takes advantage of the fact that "The overall scalar is the product of all per-axis scalars."
 When a range is defined on more than one axis the per-axis scalars (abbreviated <code>AS</code>, have values on the range <code>[0, 1]</code>) are multiplied together to create the overall scalar which will be multiplied by the deltas.
 If a range is defined along <code>axis0, axis1, ..., axisN</code> and all the axis values vary so as to approach the peak at the same rate so that <code>AS1 == AS2 == ... == ASN</code>, then the deltas will be multiplied by <code>AS0*AS1*...*ASN == AS0^N</code>.
+However, there are ways to break this. An API could allow setting each axis by index or id. Internally the named instances set values by axis index, so can themselves set the values to anything.
 </p>
 <p>
 Making the axis values all approach the peak at the same rate is easiest to accomplish if all the axes of the region have the same near, far, and peak values.
@@ -387,11 +388,85 @@ While interesting for specifying a contour, generally the number of regions for 
 <p>
 A font with the example curves from the first and second attempt applied to some glyphs can be had from <a href="VaryAlongQuad.ttf">VaryAlongQuad.ttf</a>.
 It is most instructive to view this font in <a href="https://www.axis-praxis.org/samsa/">Samsa</a>.
-Note that this font has the example curves from both the first and second attempt.
+This example font has the example curves from both the first and second attempt.
 The part of this font derived from the first attempt (user axis values less than 500) will have an odd discontinuous jump between curves on the contour which will show up at user axis value 450 (mapped to internal axis value -0.5).
 This discontinuous jump (and avoiding too many active regions at once) is the motivation for doing all the math in the second attempt.
 The part of this font derived from the second attempt (user axis values greater than 500) will transition between the curves on the contour smoothly.
 </p>
+
+
+<h2>Third attempt</h2>
+
+
+<p>
+The general idea is to apply and un-apply curves as in the second attempt, but drop the requirement of continuity.
+A curve <code>C[n]</code> is applied from near position to peak position as <code>Ca[n](t)</code> and fades out from peak position to the far position as <code>Ca[n](1-t)</code>.
+In order to preserve the offset <code>Ca[n](1)</code> over the period <code>Ca[n](1-t)</code> is applied one must add in addition <code>Ca'[n] = Ca[n](1) - Ca[n](1-t)</code>. (<code>C'</code> here may be pronounced "C compliment".)
+This can be interpreted as taking the curve <code>Ca</code>, reversing it, negating that, then translating that by <code>Ca(1)</code> to re-align.
+In order to travel <code>C[n+1]</code> while <code>Ca'[n]</code> is maintaining <code>Ca[n](1)</code> it is necessary to apply in addition <code>Co[n+1] = C[n+1](t) - Ca[n](1)</code>.
+This means applying <code>Ca[n+1] = Ca'[n] + Co[n+1] == C[n+1](t) - Ca[n](1-t)</code>.
+<code class="block">
+Ca[0] =   C[0](  t)
+Ca[1] = - C[0](1-t) + C[1](  t)
+Ca[2] =   C[0](  t) - C[1](1-t) + C[2](  t)
+Ca[3] = - C[0](1-t) + C[1](  t) - C[2](1-t) + C[3]
+Ca[n] = Ca[n-2] - C[n-1](1-t) + C[n]
+</code>
+</p>
+
+<h3>Example</h3>
+
+<p>
+Replicating the example from the second attempt
+
+<code class="block">
+ C(t)   = ( P0 - 2P1 + P2)t^2 + 2( P1 - P0)t + P0
+-C(1-t) = (-P2 + 2P1 - P0)t^2 + 2(-P1 + P2)t - P2
+</code>
+
+<code class="block">
+C [0].P = [(   0,    0), (   0, -512), ( 512, -512)]
+C [1].P = [( 512, -512), (1024, -512), (1024,    0)]
+C [2].P = [(1024,    0), (1024,  512), ( 512,  512)]
+C [3].P = [( 512,  512), (   0,  512), (   0,    0)]
+</code>
+
+<code class="block">
+Ca[0](t) x =   512t^2 +     0t  y =  512t^2 + -1024t
+Ca[1](t) x = -1024t^2 +  2048t  y =    0t^2 +     0t
+Ca[2](t) x =   512t^2 +     0t  y = -512t^2 +  1024t
+Ca[3](t) x =     0t^2 +     0t  y =    0t^2 +     0t
+</code>
+
+And end up with the same numbers as the second attempt.
+</p>
+
+<h3>Considerations</h3>
+
+<p>
+This does not make the assumption of a continuous contour and allows for contolled discontinuity.
+This is a generalization of the second attempt, which essentially does the same thing except demand that <code>C[n-1].P2 == C[n].PN</code> so that the constant terms cancel out.
+If these terms do not cancel one will require an extra region per curve on the contour in order to support the constant term (as was done in the first attempt).
+</p>
+
+
+<h2>More attempts</h2>
+
+
+<p>
+Another possible way to support a constant without discontinuity between curves of a contour is to exploit more axes with the same tag, but allow the min and max to differ.
+<code>C[0]</code> would be done as in the first attempt example but with the min and max of its axes set to the begin and end of the region the curve occupies.
+Then add another set of axes to describe <code>C[1]</code> by <code>C[1] - C[0](1)</code> over the next region with different min and max from the axes for <code>C[0]</code>.
+This has the property of showing something which could be interestingly done with axes with the same tag with different min, max, and default.
+However, it has the downside of using a lot of axes and having a lot of active regions.
+</p>
+<p>
+Yet another possible way to support the constant would be to to do <code>C[0]</code> with the end of the region at the end of the contour.
+This would the be balanced by having another region go from <code>C[0].peak</code> to <code>C[0].far</code> applying <code>C'[0]</code> to maintain the constant.
+Then the regions for the other curves can be stacked on top in a similar way.
+This uses fewer axes, but many regions, due to the fact that the curves aren't sharing regions.
+</p>
+<p>Both of these seem interesting areas to think about, but seem strictly less practical.</p>
 
 
 <h2>Footnotes</h2>
