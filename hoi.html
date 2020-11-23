@@ -420,8 +420,8 @@ Ca[n] = Ca[n-2] - C[n-1](1-t) + C[n]
 Replicating the example from the second attempt
 
 <code class="block">
- C(t)   = ( P0 - 2P1 + P2)t^2 + 2( P1 - P0)t + P0
--C(1-t) = (-P2 + 2P1 - P0)t^2 + 2(-P1 + P2)t - P2
+ C(t)   = ( P0 - 2P1 + P2)t<sup>2</sup> + 2( P1 - P0)t + P0
+-C(1-t) = (-P2 + 2P1 - P0)t<sup>2</sup> + 2(-P1 + P2)t - P2
 </code>
 
 <code class="block">
@@ -432,10 +432,10 @@ C [3].P = [( 512,  512), (   0,  512), (   0,    0)]
 </code>
 
 <code class="block">
-Ca[0](t) x =   512t^2 +     0t  y =  512t^2 + -1024t
-Ca[1](t) x = -1024t^2 +  2048t  y =    0t^2 +     0t
-Ca[2](t) x =   512t^2 +     0t  y = -512t^2 +  1024t
-Ca[3](t) x =     0t^2 +     0t  y =    0t^2 +     0t
+Ca[0](t) x =   512t<sup>2</sup> +     0t  y =  512t<sup>2</sup> + -1024t
+Ca[1](t) x = -1024t<sup>2</sup> +  2048t  y =    0t<sup>2</sup> +     0t
+Ca[2](t) x =   512t<sup>2</sup> +     0t  y = -512t<sup>2</sup> +  1024t
+Ca[3](t) x =     0t<sup>2</sup> +     0t  y =    0t<sup>2</sup> +     0t
 </code>
 
 And end up with the same numbers as the second attempt.
