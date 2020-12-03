@@ -21,37 +21,46 @@ input[type="number"] {
 
 
 <p>
-Quadratic bezier curves are used in the following examples, but any degree bezier should work.
-However, high degree curves are difficult to tweak and can run into issues with numerical stability in implementations.
+In this discussion a region is specified by near, far, and peak points, and deltas applied at the peak. (The use of near and far instead of min and max makes it easier to reason about the negative direction.)
 </p>
-
-<p>A quadratic bezier curve with control points <code>P0</code>, <code>P1</code>, <code>P2</code> can be described as
-<code class="block">
-C(t) = (P0 - 2P1 + P2)t<sup>2</sup> + 2(P1 - P0)t + P0
-</code>
-</p>
-
-<p>A contour of beziers is a vector of bezier curves with <code>C[n].PN == C[n+1].P0</code>.</p>
-
 <p>
-Non-linear interpolation takes advantage of the fact that "The overall scalar is the product of all per-axis scalars."
-When a range is defined on more than one axis the per-axis scalars (abbreviated <code>AS</code>, have values on the range <code>[0, 1]</code>) are multiplied together to create the overall scalar which will be multiplied by the deltas.
-If a range is defined along <code>axis0, axis1, ..., axisN</code> and all the axis values vary so as to approach the peak at the same rate so that <code>AS1 == AS2 == ... == ASN</code>, then the deltas will be multiplied by <code>AS0*AS1*...*ASN == AS0^N</code>.
-However, there are ways to break this. An API could allow setting each axis by index or id. Internally the named instances set values by axis index, so can themselves set the values to anything.
+Non-linear interpolation takes advantage of the fact that "<a href="https://docs.microsoft.com/en-us/typography/opentype/spec/otvaroverview#algorithm-for-interpolation-of-instance-values">The overall scalar is the product of all per-axis scalars.</a>"
+When a region is defined on more than one axis the per-axis scalars (abbreviated <code>AS</code>) are multiplied together to create the overall scalar (abbreviated <code>S</code>) which will be multiplied by the deltas.
+The per-axis scalars <code>AS</code> have a value of 0 outside the region and linearly increase from the edge of the region to a value of 1 at the peak for that axis.
+If a region is defined along <code>axis1, axis2, ..., axisN</code> and all the axis values vary so as to approach the peak at the same rate so that <code>AS1 == AS2 == ... == ASN</code>, then the deltas will be multiplied by <code>S = AS1*AS2*...*ASN == AS^N</code>.
 </p>
 <p>
 Making the axis values all approach the peak at the same rate is easiest to accomplish if all the axes of the region have the same near, far, and peak values.
 One possible way to vary the axes together is to give them all the same axis tag, which works because internally the axes are stored as a list of axes and each axis has a tag.
 Specifying a variation value by axis tag applies the variation value to all axes with that axis tag in all current major implementations.
 While this is not currently required by the specification, this is the only addition to the specification used here<a href="#footnote1">[1]</a>.
-Since quadratic beziers are used in the examples, the examples will be using two axes locked together to create the t<sup>2</sup> and t terms required.
+However, there are ways to break this. An API could allow setting each axis by index. Internally the named instances set values by axis index, so can themselves set the values to anything.
 </p>
+
+<p>
+Using one such region for each required power of <code>AS</code> with deltas for the coefficient allows the use of a polynomial basis for parametric curves.
+The following discussion considers these polynomial parametric curves in bezier form.
+Quadratic bezier curves are used in the following examples, but any degree bezier should work.
+However, high degree curves are difficult to tweak and can run into issues with numerical stability in implementations.
+Keep in mind that these curves will be describing deltas relative to the default point.
+Since quadratic beziers are used in the examples, the examples will be using two axes locked together to create the <code>t<sup>2</sup></code> and <code>t</code> terms required.
+Note that from the near point to the peak point will be used as a <code>t</code> term and from a peak point to a far point will be a <code>1-t</code> term.
+</p>
+
+<p>A quadratic bezier curve with control points <code>P0</code>, <code>P1</code>, <code>P2</code> can be described in polynomial form as
+<code class="block">
+C(t) = (P0 - 2P1 + P2)t<sup>2</sup> + 2(P1 - P0)t + P0
+</code>
+</p>
+
+<p>A contour of <code>N</code> beziers is a vector of bezier curves <code>C[N]</code> where each follows the previous as <code>C[n].peak == C[n+1].near</code>.</p>
 
 
 <h2>First attempt</h2>
 
 
-<p>Since ranges must peak at a single point, constants other than zero are difficult. So re-write <code>P0</code> as <code>P0t + P0(1-t)</code>.
+<p>
+Since regions must peak at a single point, constants other than zero are difficult. So re-write <code>P0</code> as <code>P0t + P0(1-t)</code>.
 <code class="block">
 C(t) = (P0 - 2P1 + P2)t<sup>2</sup> + (2P1 - P0)t + P0(1-t)
 </code>
@@ -157,7 +166,7 @@ Offsetting the constant term or all of <code>C[n+1]</code> by an ULP (1 / 2<sup>
 <h2>Second attempt</h2>
 
 
-<p>The general idea is to avoid discontinuity by assuming a single contour <code>C[0..N]</code> instead of arbitrary curves (G0 continuity) to avoid constants.</p>
+<p>The general idea is to avoid discontinuity by assuming a single contour with G0 continuity instead of arbitrary curves so that <code>C[n].PN == C[n+1].P0</code> to avoid constants.</p>
 <p>
 A curve <code>C</code> is applied from near position to peak position as <code>C(t)</code> and fades out from peak position to the far position as <code>C(1-t)</code>.
 In order to preserve the offset <code>C(1)</code> over the period <code>C(1-t)</code> is applied one must add in addition <code>C' = C(1) - C(1-t)</code>. (<code>C'</code> here may be pronounced "C compliment".)
@@ -192,9 +201,7 @@ Importantly, neither of <code>Co</code> or <code>C'</code> has a constant term.
 <p>
 Without loss of generality, assume <code>C[0].P0 = (0,0)</code> so that <code>C[0] == Co[0]</code>.
 If a discontinuous offset is desired, a <code>Pt + P(1-t)</code> constant delta region (or any shaped region) can be added across the contour (or wherever for that matter).
-To avoid double applications or holes two non-zero offsets cannot be next to each other.
 Often hard discontinuity can be avoided by allowing contours extremely fast applying curves.
-Note that the math can be made to work out for the case with <code>C[0] != Co[0]</code>, but it's messy and one is left with many out of phase sawtooth regions eating into the region limit to provide the constant offset.
 </p>
 <p>
 <code>C[0]</code> is applied from where it starts to <code>C[0].peak</code> as <code>Co[0](t)</code>. It then phases out to the <code>C[1].peak</code> as <code>Co[0](1-t) == Cr[0](t)</code>.
@@ -816,7 +823,7 @@ updateValue();
 
 <p>
 This does not make the assumption of a continuous contour and allows for contolled discontinuity.
-This is a generalization of the second attempt, which essentially does the same thing except demand that <code>C[n-1].P2 == C[n].PN</code> so that the constant terms cancel out.
+This is a generalization of the second attempt, which essentially does the same thing except demand that <code>C[n].PN == C[n+1].P0</code> so that the constant terms cancel out.
 If these terms do not cancel one will require an extra region per curve on the contour in order to support the constant term (as was done in the first attempt).
 </p>
 
