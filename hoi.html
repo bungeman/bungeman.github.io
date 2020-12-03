@@ -16,8 +16,31 @@ input[type="number"] {
 
 <h1>Higher Order Interpolation of OpenType variable fonts</h1>
 
+<ol>
+<li><a href="#preliminary">Preliminary</a></li>
+<li><a href="#independent-curves">First attempt - Independent Curves</a>
+  <ul>
+  <li><a href="#independent-curves-example">Example</a></li>
+  <li><a href="#independent-curves-considerations">Considerations</a></li>
+  </ul>
+</li>
+<li><a href="#contour-of-G0-curves">Second attempt - Contour of G0 Curves</a>
+  <ul>
+  <li><a href="#contour-of-G0-curves-example">Example</a></li>
+  <li><a href="#contour-of-G0-curves-considerations">Considerations</a></li>
+  </ul>
+</li>
+<li><a href="#independent-curves-and-contour-of-G0-curves-example-font">Example - Font for First and Second attempts</a></li>
+<li><a href="#contour-of-noncontinuous-curves">Third attempt - Contour of Jump Discontinuous Curves</a>
+  <ul>
+  <li><a href="#contour-of-noncontinuous-curves-example">Example</a></li>
+  <li><a href="#contour-of-noncontinuous-curves-considerations">Considerations</a></li>
+  </ul>
+</li>
 
-<h2>Preliminary</h2>
+</ol>
+
+<h2 id="preliminary">Preliminary</h2>
 
 
 <p>
@@ -56,7 +79,7 @@ C(t) = (P0 - 2P1 + P2)t<sup>2</sup> + 2(P1 - P0)t + P0
 <p>A contour of <code>N</code> beziers is a vector of bezier curves <code>C[N]</code> where each follows the previous as <code>C[n].peak == C[n+1].near</code>.</p>
 
 
-<h2>First attempt</h2>
+<h2 id="independent-curves">First attempt - Independent Curves</h2>
 
 
 <p>
@@ -78,7 +101,7 @@ The number of axes required is <code>deg(C)</code>. The number of regions requir
 At most points on a contour <code>deg(C)+1</code> regions are active, with <code>2(deg(C)+1)</code> regions active at any point of curve overlap (including where curves abut, which is bad).
 </p>
 
-<h3>Example</h3>
+<h3 id="independent-curves-example">Example</h3>
 <p>
 A not great but easy to understand approximation of a half circle in a square using two quads is to put the on-curve points in the middle of the edges and the off-curve points in the corners.
 This example starts with the left point of the half circle approximation at the origin and has it travel clockwise (font space being y-up) in the negative axis direction.
@@ -156,14 +179,14 @@ After compiling with ttx, open with a hex editor and replace <code>WGHT</code> w
 </code>
 </p>
 
-<h3>Considerations</h3>
+<h3 id="independent-curves-considerations">Considerations</h3>
 <p>
 Unfortunately, attempting to construct a contour with consecutive curves <code>C[n]</code> and <code>C[n+1]</code> with the common point <code>Pc == C[n].PN == C[n+1].P0</code> the offset <code>Pc</code> will be double applied where the two contours overlap, resulting in a discontinuity.
 Offsetting the constant term or all of <code>C[n+1]</code> by an ULP (1 / 2<sup>14</sup>) may somewhat mitigate, but can still give rise to a discontinuity as the application may allow setting the variation more finely than the ULP available.
 </p>
 
 
-<h2>Second attempt</h2>
+<h2 id="contour-of-G0-curves">Second attempt - Contour of G0 Curves</h2>
 
 
 <p>The general idea is to avoid discontinuity by assuming a single contour with G0 continuity instead of arbitrary curves so that <code>C[n].PN == C[n+1].P0</code> to avoid constants.</p>
@@ -190,13 +213,13 @@ For brevity in the following block, all <code>Pn</code> are <code>C.Pn</code> (t
 -Cor(t) = (-P2 + 2P1 - P0)t<sup>2</sup> + 2(-P1 + P2)t + (-P2 + P0)  //        - Cor(1-t)
  Co'(t) = (-P2 + 2P1 - P0)t<sup>2</sup> + 2(-P1 + P2)t               // Cor(1) - Cor(1-t)
 </code>
+</p>
 <ul>
 <li><code>C </code> fades as <code>Cr </code> which is complimented by <code>C'</code>.</li>
 <li><code>C'</code> fades as <code>C'r</code> which is complimented by <code>C'' == Co</code>.</li>
 <li><code>Co</code> fades as <code>Cor</code> which is complimented by <code>Co' == C'</code>.</li>
 </ul>
-Importantly, neither of <code>Co</code> or <code>C'</code> has a constant term.
-</p>
+<p>Importantly, neither of <code>Co</code> or <code>C'</code> has a constant term.</p>
 
 <p>
 Without loss of generality, assume <code>C[0].P0 = (0,0)</code> so that <code>C[0] == Co[0]</code>.
@@ -207,14 +230,15 @@ Often hard discontinuity can be avoided by allowing contours extremely fast appl
 <code>C[0]</code> is applied from where it starts to <code>C[0].peak</code> as <code>Co[0](t)</code>. It then phases out to the <code>C[1].peak</code> as <code>Co[0](1-t) == Cr[0](t)</code>.
 Subsequent curves in the contour may be followed with regions described by
 <ul>
+</p>
 <li><code>C[n].near</code> at <code>C[n-1].peak</code></li>
 <li><code>C[n].far</code> at <code>C[n+1].peak</code></li>
 <li><code>C[n].peak</code> where ever the curve should be fully applied (the logical end of the curve)</li>
 <li>adding <code>C[n-1](1) - C[n-1](1-t) == C'[n-1]</code> to preserve the offset <code>C[n-1].PN == C[n].P0 == C[n-1](1) == C[n](0)</code> over the range the previous region is providing <code>C[n-1](1-t) == Cr[n-1](t)</code>.</li>
 <li>adding <code>Co[n]</code></li>
 </ul>
-<code>C[N]</code> works the same way except that <code>C[N].far == C[N].peak</code>.
-</p>
+<p><code>C[N]</code> works the same way except that <code>C[N].far == C[N].peak</code>.</p>
+
 <p>
 The first line of the following factorings is the <code>C[n-1](1-t) == Cr[n-1](t)</code> of the previous curve being 'unapplied', <code>Cu[n]</code>.
 The second line of the following factorings is the <code>C[n-1](1) - C[n-1](1-t) + Co[n]</code> term for the current curve to be 'applied', <code>Ca[n]</code>.
@@ -256,7 +280,7 @@ At middle peak points, depending on how the implementation treats edges, either 
 </p>
 
 
-<h3>Example</h3>
+<h3 id="contour-of-G0-curves-example">Example</h3>
 <p>
 A not great but easy to understand approximation of a circle in a square using four quads is to put the on-curve points in the middle of the edges and the off-curve points in the corners.
 This example starts with the left point of the circle approximation at the origin and has it travel counter-clockwise (font space being y-up) in the positive axis direction.
@@ -381,7 +405,7 @@ After compiling with ttx, open with a hex editor and replace <code>WGHT</code> w
 </code>
 </p>
 
-<h3>Considerations</h3>
+<h3 id="contour-of-G0-curves-considerations">Considerations</h3>
 <p>
 For brevity this example moves a single point along a contour.
 If there are multiple points moving along different curves but the curves are applied over the same regions of axis space then those curves can share regions.
@@ -400,7 +424,7 @@ While interesting for specifying a contour, generally the number of regions for 
 </p>
 
 
-<h2>Example</h2>
+<h2 id="independent-curves-and-contour-of-G0-curves-example-font">Example - Font For First and Second attempts</h2>
 
 
 <p>
@@ -413,7 +437,7 @@ The part of this font derived from the second attempt (user axis values greater 
 </p>
 
 
-<h2>Third attempt</h2>
+<h2 id="contour-of-noncontinuous-curves">Third attempt - Contour of Jump Discontinuous Curves</h2>
 
 
 <p>
@@ -432,7 +456,7 @@ Ca[n] = Ca[n-2] - C[n-1](1-t) + C[n]
 </code>
 </p>
 
-<h3>Example</h3>
+<h3 id="contour-of-noncontinuous-curves-example">Example</h3>
 
 <p>
 Replicating the example from the second attempt
@@ -480,10 +504,10 @@ C [3].P = [(<input type="number" class="fuint" id="C3P0x" value="512"/>, <input 
 </code>
 
 <code class="block">
-Ca[0](t) x = <span id="Ca0xt2">0</span>t<sup>2</sup> + <span id="Ca0xt1">0</span>t + <span id="Ca0xt0">0</span>  y = <span id="Ca0yt2">0</span>t<sup>2</sup> + <span id="Ca0yt1">0</span>t + <span id="Ca0yt0">0</span>
-Ca[1](t) x = <span id="Ca1xt2">0</span>t<sup>2</sup> + <span id="Ca1xt1">0</span>t + <span id="Ca1xt0">0</span>  y = <span id="Ca1yt2">0</span>t<sup>2</sup> + <span id="Ca1yt1">0</span>t + <span id="Ca1yt0">0</span>
-Ca[2](t) x = <span id="Ca2xt2">0</span>t<sup>2</sup> + <span id="Ca2xt1">0</span>t + <span id="Ca2xt0">0</span>  y = <span id="Ca2yt2">0</span>t<sup>2</sup> + <span id="Ca2yt1">0</span>t + <span id="Ca2yt0">0</span>
-Ca[3](t) x = <span id="Ca3xt2">0</span>t<sup>2</sup> + <span id="Ca3xt1">0</span>t + <span id="Ca3xt0">0</span>  y = <span id="Ca3yt2">0</span>t<sup>2</sup> + <span id="Ca3yt1">0</span>t + <span id="Ca3yt0">0</span>
+Ca[0](t) x = <span id="Ca0xt2">  512</span>t<sup>2</sup> + <span id="Ca0xt1">    0</span>t + <span id="Ca0xt0">    0</span>  y = <span id="Ca0yt2">  512</span>t<sup>2</sup> + <span id="Ca0yt1">-1024</span>t + <span id="Ca0yt0">    0</span>
+Ca[1](t) x = <span id="Ca1xt2">-1024</span>t<sup>2</sup> + <span id="Ca1xt1"> 1024</span>t + <span id="Ca1xt0">  512</span>  y = <span id="Ca1yt2">-1024</span>t<sup>2</sup> + <span id="Ca1yt1"> 1024</span>t + <span id="Ca1yt0">  512</span>
+Ca[2](t) x = <span id="Ca2xt2"> 1536</span>t<sup>2</sup> + <span id="Ca2xt1">-1024</span>t + <span id="Ca2xt0"> -512</span>  y = <span id="Ca2yt2">  512</span>t<sup>2</sup> + <span id="Ca2yt1">    0</span>t + <span id="Ca2yt0"> -512</span>
+Ca[3](t) x = <span id="Ca3xt2">-2048</span>t<sup>2</sup> + <span id="Ca3xt1"> 3072</span>t + <span id="Ca3xt0">  512</span>  y = <span id="Ca3yt2">    0</span>t<sup>2</sup> + <span id="Ca3yt1"> 1024</span>t + <span id="Ca3yt0"> -512</span>
 </code>
 </p>
 
@@ -495,10 +519,10 @@ But now the constants are not all going to cancel, so the constants will need to
 </code>
 
 <code class="block">
-Ca[0](t) x = <span id="Ca'0xt2">0</span>t<sup>2</sup> + <span id="Ca'0xt1">0</span>t + <span id="Ca'0x1t">0</span>(1-t)  y = <span id="Ca'0yt2">0</span>t<sup>2</sup> + <span id="Ca'0yt1">0</span>t + <span id="Ca'0y1t">0</span>(1-t)
-Ca[1](t) x = <span id="Ca'1xt2">0</span>t<sup>2</sup> + <span id="Ca'1xt1">0</span>t + <span id="Ca'1x1t">0</span>(1-t)  y = <span id="Ca'1yt2">0</span>t<sup>2</sup> + <span id="Ca'1yt1">0</span>t + <span id="Ca'1y1t">0</span>(1-t)
-Ca[2](t) x = <span id="Ca'2xt2">0</span>t<sup>2</sup> + <span id="Ca'2xt1">0</span>t + <span id="Ca'2x1t">0</span>(1-t)  y = <span id="Ca'2yt2">0</span>t<sup>2</sup> + <span id="Ca'2yt1">0</span>t + <span id="Ca'2y1t">0</span>(1-t)
-Ca[3](t) x = <span id="Ca'3xt2">0</span>t<sup>2</sup> + <span id="Ca'3xt1">0</span>t + <span id="Ca'3x1t">0</span>(1-t)  y = <span id="Ca'3yt2">0</span>t<sup>2</sup> + <span id="Ca'3yt1">0</span>t + <span id="Ca'3y1t">0</span>(1-t)
+Ca[0](t) x = <span id="Ca'0xt2">  512</span>t<sup>2</sup> + <span id="Ca'0xt1">    0</span>t + <span id="Ca'0x1t">    0</span>(1-t)  y = <span id="Ca'0yt2">  512</span>t<sup>2</sup> + <span id="Ca'0yt1">-1024</span>t + <span id="Ca'0y1t">    0</span>(1-t)
+Ca[1](t) x = <span id="Ca'1xt2">-1024</span>t<sup>2</sup> + <span id="Ca'1xt1"> 1536</span>t + <span id="Ca'1x1t">  512</span>(1-t)  y = <span id="Ca'1yt2">-1024</span>t<sup>2</sup> + <span id="Ca'1yt1"> 1536</span>t + <span id="Ca'1y1t">  512</span>(1-t)
+Ca[2](t) x = <span id="Ca'2xt2"> 1536</span>t<sup>2</sup> + <span id="Ca'2xt1">-1536</span>t + <span id="Ca'2x1t"> -512</span>(1-t)  y = <span id="Ca'2yt2">  512</span>t<sup>2</sup> + <span id="Ca'2yt1"> -512</span>t + <span id="Ca'2y1t"> -512</span>(1-t)
+Ca[3](t) x = <span id="Ca'3xt2">-2048</span>t<sup>2</sup> + <span id="Ca'3xt1"> 3584</span>t + <span id="Ca'3x1t">  512</span>(1-t)  y = <span id="Ca'3yt2">    0</span>t<sup>2</sup> + <span id="Ca'3yt1">  512</span>t + <span id="Ca'3y1t"> -512</span>(1-t)
 </code>
 </p>
 
@@ -569,11 +593,11 @@ Ca[n] =  Ca[n-2](  t) - C[n-2].P0(1-t) - C[n-1](1-t) + C[n-1].P0(t) + C[n](t)
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.25" min="0" max="0.5"/&gt;
         &lt;coord axis="WGHT" value="0.25" min="0" max="0.5"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'0xt2">0</span>" y="<span id="ttxCa'0yt2">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'0xt2">512</span>" y="<span id="ttxCa'0yt2">512</span>"/&gt;
       &lt;/tuple&gt;
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.25" min="0" max="0.5"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'0xt1">0</span>" y="<span id="ttxCa'0yt1">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'0xt1">0</span>" y="<span id="ttxCa'0yt1">-1024</span>"/&gt;
       &lt;/tuple&gt;
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0" min="0" max="0.25"/&gt;
@@ -583,43 +607,43 @@ Ca[n] =  Ca[n-2](  t) - C[n-2].P0(1-t) - C[n-1](1-t) + C[n-1].P0(t) + C[n](t)
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.5" min="0.25" max="0.75"/&gt;
         &lt;coord axis="WGHT" value="0.5" min="0.25" max="0.75"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'1xt2">0</span>" y="<span id="ttxCa'1yt2">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'1xt2">-1024</span>" y="<span id="ttxCa'1yt2">-1024</span>"/&gt;
       &lt;/tuple&gt;
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.5" min="0.25" max="0.75"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'1xt1">0</span>" y="<span id="ttxCa'1yt1">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'1xt1">1536</span>" y="<span id="ttxCa'1yt1">1536</span>"/&gt;
       &lt;/tuple&gt;
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.25" min="0.25" max="0.5"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'1x1t">0</span>" y="<span id="ttxCa'1y1t">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'1x1t">512</span>" y="<span id="ttxCa'1y1t">512</span>"/&gt;
       &lt;/tuple&gt;
 
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.75" min="0.5" max="1.0"/&gt;
         &lt;coord axis="WGHT" value="0.75" min="0.5" max="1.0"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'2xt2">0</span>" y="<span id="ttxCa'2yt2">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'2xt2">1536</span>" y="<span id="ttxCa'2yt2">512</span>"/&gt;
       &lt;/tuple&gt;
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.75" min="0.5" max="1.0"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'2xt1">0</span>" y="<span id="ttxCa'2yt1">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'2xt1">-1024</span>" y="<span id="ttxCa'2yt1">0</span>"/&gt;
       &lt;/tuple&gt;
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.5" min="0.5" max="0.75"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'2x1t">0</span>" y="<span id="ttxCa'2y1t">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'2x1t">-512</span>" y="<span id="ttxCa'2y1t">-512</span>"/&gt;
       &lt;/tuple&gt;
 
       &lt;tuple&gt;
         &lt;coord axis="wght" value="1.0" min="0.75" max="1.0"/&gt;
         &lt;coord axis="WGHT" value="1.0" min="0.75" max="1.0"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'3xt2">0</span>" y="<span id="ttxCa'3yt2">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'3xt2">-2048</span>" y="<span id="ttxCa'3yt2">0</span>"/&gt;
       &lt;/tuple&gt;
       &lt;tuple&gt;
         &lt;coord axis="wght" value="1.0" min="0.75" max="1.0"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'3xt1">0</span>" y="<span id="ttxCa'3yt1">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'3xt1">3072</span>" y="<span id="ttxCa'3yt1">0</span>"/&gt;
       &lt;/tuple&gt;
       &lt;tuple&gt;
         &lt;coord axis="wght" value="0.75" min="0.75" max="1.0"/&gt;
-        &lt;delta pt="0" x="<span id="ttxCa'3x1t">0</span>" y="<span id="ttxCa'3y1t">0</span>"/&gt;
+        &lt;delta pt="0" x="<span id="ttxCa'3x1t">0</span>" y="<span id="ttxCa'3y1t">-1024</span>"/&gt;
       &lt;/tuple&gt;
     &lt;/glyphVariations&gt;
   &lt;/gvar&gt;
@@ -731,24 +755,27 @@ function polyFromCurveComplimentFactoredConstant(C) {
   return new Poly(t)
 }
 
+function alignedStringFromCoefficient(c) {
+  return c.toString().padStart(5, ' ');
+}
 function updateValue(e) {
 
   // Ca[0] =   C[0](  t)
   let C0 = polyFromCurve(C[0]);
-  Ca[0].t[2].x.textContent = C0.t[2].x;
-  Ca[0].t[2].y.textContent = C0.t[2].y;
-  Ca[0].t[1].x.textContent = C0.t[1].x;
-  Ca[0].t[1].y.textContent = C0.t[1].y;
-  Ca[0].t[0].x.textContent = C0.t[0].x;
-  Ca[0].t[0].y.textContent = C0.t[0].y;
+  Ca[0].t[2].x.textContent = alignedStringFromCoefficient(C0.t[2].x);
+  Ca[0].t[2].y.textContent = alignedStringFromCoefficient(C0.t[2].y);
+  Ca[0].t[1].x.textContent = alignedStringFromCoefficient(C0.t[1].x);
+  Ca[0].t[1].y.textContent = alignedStringFromCoefficient(C0.t[1].y);
+  Ca[0].t[0].x.textContent = alignedStringFromCoefficient(C0.t[0].x);
+  Ca[0].t[0].y.textContent = alignedStringFromCoefficient(C0.t[0].y);
 
   let C02 = polyFromCurveFactoredConstant(C[0]);
-  Ca2[0].t[2].x.textContent = C02.t[2].x;
-  Ca2[0].t[2].y.textContent = C02.t[2].y;
-  Ca2[0].t[1].x.textContent = C02.t[1].x;
-  Ca2[0].t[1].y.textContent = C02.t[1].y;
-  Ca2[0].t[0].x.textContent = C02.t[0].x;
-  Ca2[0].t[0].y.textContent = C02.t[0].y;
+  Ca2[0].t[2].x.textContent = alignedStringFromCoefficient(C02.t[2].x);
+  Ca2[0].t[2].y.textContent = alignedStringFromCoefficient(C02.t[2].y);
+  Ca2[0].t[1].x.textContent = alignedStringFromCoefficient(C02.t[1].x);
+  Ca2[0].t[1].y.textContent = alignedStringFromCoefficient(C02.t[1].y);
+  Ca2[0].t[0].x.textContent = alignedStringFromCoefficient(C02.t[0].x);
+  Ca2[0].t[0].y.textContent = alignedStringFromCoefficient(C02.t[0].y);
 
   ttxCa2[0].t[2].x.textContent = C02.t[2].x;
   ttxCa2[0].t[2].y.textContent = C02.t[2].y;
@@ -761,21 +788,21 @@ function updateValue(e) {
   // Ca[1] = - C[0](1-t) + C[1](  t)
   let C0u = polyFromCurveCompliment(C[0]);
   let C1 = polyFromCurve(C[1]);
-  Ca[1].t[2].x.textContent = C0u.t[2].x + C1.t[2].x;
-  Ca[1].t[2].y.textContent = C0u.t[2].y + C1.t[2].y;
-  Ca[1].t[1].x.textContent = C0u.t[1].x + C1.t[1].x;
-  Ca[1].t[1].y.textContent = C0u.t[1].y + C1.t[1].y;
-  Ca[1].t[0].x.textContent = C0u.t[0].x + C1.t[0].x;
-  Ca[1].t[0].y.textContent = C0u.t[0].y + C1.t[0].y;
+  Ca[1].t[2].x.textContent = alignedStringFromCoefficient(C0u.t[2].x + C1.t[2].x);
+  Ca[1].t[2].y.textContent = alignedStringFromCoefficient(C0u.t[2].y + C1.t[2].y);
+  Ca[1].t[1].x.textContent = alignedStringFromCoefficient(C0u.t[1].x + C1.t[1].x);
+  Ca[1].t[1].y.textContent = alignedStringFromCoefficient(C0u.t[1].y + C1.t[1].y);
+  Ca[1].t[0].x.textContent = alignedStringFromCoefficient(C0u.t[0].x + C1.t[0].x);
+  Ca[1].t[0].y.textContent = alignedStringFromCoefficient(C0u.t[0].y + C1.t[0].y);
 
   let C0u2 = polyFromCurveComplimentFactoredConstant(C[0]);
   let C12 = polyFromCurveFactoredConstant(C[1]);
-  Ca2[1].t[2].x.textContent = C0u2.t[2].x + C12.t[2].x;
-  Ca2[1].t[2].y.textContent = C0u2.t[2].y + C12.t[2].y;
-  Ca2[1].t[1].x.textContent = C0u2.t[1].x + C12.t[1].x;
-  Ca2[1].t[1].y.textContent = C0u2.t[1].y + C12.t[1].y;
-  Ca2[1].t[0].x.textContent = C0u2.t[0].x + C12.t[0].x;
-  Ca2[1].t[0].y.textContent = C0u2.t[0].y + C12.t[0].y;
+  Ca2[1].t[2].x.textContent = alignedStringFromCoefficient(C0u2.t[2].x + C12.t[2].x);
+  Ca2[1].t[2].y.textContent = alignedStringFromCoefficient(C0u2.t[2].y + C12.t[2].y);
+  Ca2[1].t[1].x.textContent = alignedStringFromCoefficient(C0u2.t[1].x + C12.t[1].x);
+  Ca2[1].t[1].y.textContent = alignedStringFromCoefficient(C0u2.t[1].y + C12.t[1].y);
+  Ca2[1].t[0].x.textContent = alignedStringFromCoefficient(C0u2.t[0].x + C12.t[0].x);
+  Ca2[1].t[0].y.textContent = alignedStringFromCoefficient(C0u2.t[0].y + C12.t[0].y);
 
   // Ca[1] = - C[0](1-t) + C[0].P0(  t) + C[1](  t)
   ttxCa2[1].t[2].x.textContent = C0u2.t[2].x + C12.t[2].x;
@@ -789,21 +816,21 @@ function updateValue(e) {
     // Ca[n] = Ca[n-2] - C[n-1](1-t) + C[n]
     let Cn1u = polyFromCurveCompliment(C[Ci-1]);
     let Cn = polyFromCurve(C[Ci]);
-    Ca[Ci].t[2].x.textContent = Number(Ca[Ci-2].t[2].x.textContent) + Cn1u.t[2].x + Cn.t[2].x;
-    Ca[Ci].t[2].y.textContent = Number(Ca[Ci-2].t[2].y.textContent) + Cn1u.t[2].y + Cn.t[2].y;
-    Ca[Ci].t[1].x.textContent = Number(Ca[Ci-2].t[1].x.textContent) + Cn1u.t[1].x + Cn.t[1].x;
-    Ca[Ci].t[1].y.textContent = Number(Ca[Ci-2].t[1].y.textContent) + Cn1u.t[1].y + Cn.t[1].y;
-    Ca[Ci].t[0].x.textContent = Number(Ca[Ci-2].t[0].x.textContent) + Cn1u.t[0].x + Cn.t[0].x;
-    Ca[Ci].t[0].y.textContent = Number(Ca[Ci-2].t[0].y.textContent) + Cn1u.t[0].y + Cn.t[0].y;
+    Ca[Ci].t[2].x.textContent = alignedStringFromCoefficient(Number(Ca[Ci-2].t[2].x.textContent) + Cn1u.t[2].x + Cn.t[2].x);
+    Ca[Ci].t[2].y.textContent = alignedStringFromCoefficient(Number(Ca[Ci-2].t[2].y.textContent) + Cn1u.t[2].y + Cn.t[2].y);
+    Ca[Ci].t[1].x.textContent = alignedStringFromCoefficient(Number(Ca[Ci-2].t[1].x.textContent) + Cn1u.t[1].x + Cn.t[1].x);
+    Ca[Ci].t[1].y.textContent = alignedStringFromCoefficient(Number(Ca[Ci-2].t[1].y.textContent) + Cn1u.t[1].y + Cn.t[1].y);
+    Ca[Ci].t[0].x.textContent = alignedStringFromCoefficient(Number(Ca[Ci-2].t[0].x.textContent) + Cn1u.t[0].x + Cn.t[0].x);
+    Ca[Ci].t[0].y.textContent = alignedStringFromCoefficient(Number(Ca[Ci-2].t[0].y.textContent) + Cn1u.t[0].y + Cn.t[0].y);
 
     let Cn1u2 = polyFromCurveComplimentFactoredConstant(C[Ci-1]);
     let Cn2 = polyFromCurveFactoredConstant(C[Ci]);
-    Ca2[Ci].t[2].x.textContent = Number(Ca2[Ci-2].t[2].x.textContent) + Cn1u2.t[2].x + Cn2.t[2].x;
-    Ca2[Ci].t[2].y.textContent = Number(Ca2[Ci-2].t[2].y.textContent) + Cn1u2.t[2].y + Cn2.t[2].y;
-    Ca2[Ci].t[1].x.textContent = Number(Ca2[Ci-2].t[1].x.textContent) + Cn1u2.t[1].x + Cn2.t[1].x;
-    Ca2[Ci].t[1].y.textContent = Number(Ca2[Ci-2].t[1].y.textContent) + Cn1u2.t[1].y + Cn2.t[1].y;
-    Ca2[Ci].t[0].x.textContent = Number(Ca2[Ci-2].t[0].x.textContent) + Cn1u2.t[0].x + Cn2.t[0].x;
-    Ca2[Ci].t[0].y.textContent = Number(Ca2[Ci-2].t[0].y.textContent) + Cn1u2.t[0].y + Cn2.t[0].y;
+    Ca2[Ci].t[2].x.textContent = alignedStringFromCoefficient(Number(Ca2[Ci-2].t[2].x.textContent) + Cn1u2.t[2].x + Cn2.t[2].x);
+    Ca2[Ci].t[2].y.textContent = alignedStringFromCoefficient(Number(Ca2[Ci-2].t[2].y.textContent) + Cn1u2.t[2].y + Cn2.t[2].y);
+    Ca2[Ci].t[1].x.textContent = alignedStringFromCoefficient(Number(Ca2[Ci-2].t[1].x.textContent) + Cn1u2.t[1].x + Cn2.t[1].x);
+    Ca2[Ci].t[1].y.textContent = alignedStringFromCoefficient(Number(Ca2[Ci-2].t[1].y.textContent) + Cn1u2.t[1].y + Cn2.t[1].y);
+    Ca2[Ci].t[0].x.textContent = alignedStringFromCoefficient(Number(Ca2[Ci-2].t[0].x.textContent) + Cn1u2.t[0].x + Cn2.t[0].x);
+    Ca2[Ci].t[0].y.textContent = alignedStringFromCoefficient(Number(Ca2[Ci-2].t[0].y.textContent) + Cn1u2.t[0].y + Cn2.t[0].y);
 
     // Ca[n] = Ca[n-2](t) - Ca[n-2].P0(1-t) - C[n-1](1-t) + Ca[n-1].P0(t) + C[n](t)
     ttxCa2[Ci].t[2].x.textContent = Number(ttxCa2[Ci-2].t[2].x.textContent) + Cn1u2.t[2].x + Cn2.t[2].x;
@@ -819,7 +846,7 @@ function updateValue(e) {
 updateValue();
 </script>
 
-<h3>Considerations</h3>
+<h3 id="contour-of-noncontinuous-curves-considerations">Considerations</h3>
 
 <p>
 This does not make the assumption of a continuous contour and allows for contolled discontinuity.
@@ -847,7 +874,7 @@ This uses fewer axes, but many regions, due to the fact that the curves aren't s
 <p>Both of these seem interesting areas to think about, but seem strictly less practical.</p>
 
 
-<h2>Footnotes</h2>
+<h2 id="footnotes">Footnotes</h2>
 
 
 <ol>
