@@ -190,3 +190,7 @@ A = T*R*TD[0]*RD[0]*TD[1]*RD[1]*...*TD[r]*RD[r].
 This is applied to flatComponentTransforms[flatComponentIndex] (the component's matrix) M as M = A*M.
 The current composite's matrix C is applied as M = C*M.
 </p>
+<p>
+Note: when a translationDelta TD[r] and rotationDelta RD[r] both happen at the same (flatComponentIndex, regionIndex),
+something slightly different is done that is still being investigated.
+</p>
