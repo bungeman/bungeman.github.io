@@ -1,0 +1,192 @@
+<style>
+table {
+  width: 100%;
+  border: 1px solid gray;
+}
+th {
+  text-align: left;
+}
+td {
+  border-block-start: 1px solid gray
+}
+</style>
+
+
+<h1>hvgl table</h1>
+
+<p>All values are little endian.</p>
+<p>
+Every glyph has its own list of axis,
+which are independent in number and meaning from
+the font's list of axis or other glyph's list of axis.
+Each axis has exactly two regions,
+one region for negative axis values (here named <code>less</code>) and
+one region for positive axis values (here named <code>more</code>).
+In variation space terms the deltas are on the faces,
+but they are not peak deltas
+as the region scalars may have magnitude more than one.
+The first <code>fontGlyphCount</code> glyphs should have <code>axisCount</code> set to the number of font axis.
+</p>
+<p>
+To begin processing a glyph, flatten the component tree and create
+an array of flat axis values (one entry for each axis of each glyph) and
+an array of flat component transforms (one for each glyph).
+All flat axis values start off zero.
+All flat component transforms start off as identity.
+The current font variation can then be added to the flat axis values of the initial glyph.
+While processing a glyph the flat indexes start at zero with the first component.
+</p>
+<p>
+The region scalars are then computed for the current glyph as an array regionScalars[axisCount[2]]
+(with the two regions being <code>less</code> and <code>more</code>).
+Each entry is either the absolute axis value or zero.
+</p>
+<p>
+Each composite glyph modifies some of its descendent's axis values and transforms and
+applies its own flat transform to each of its component's flat transforms.
+Then each of its components are processed as if they were a top level glyph,
+with a reduced view into the flat axis values and flat component transforms.
+</p>
+<p>
+For a simple glyph the deltas are applied based on the regionScalars,
+the on curve points are interpolated,
+the associated flat component transform is applied,
+and the countours are appended to the overall path.
+</p>
+
+<h2>Header</h2>
+<table>
+<thead><tr><th>Type</th><th>Name</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td>uint16</td><td>majorVersion</td><td>Set to 3.</td></tr>
+<tr><td>uint16</td><td>minorVersion</td><td>Set to 1.</td></tr>
+<tr><td>uint32</td><td>reserved</td><td>Set to zero.</td></tr>
+<tr><td>uint32</td><td>glyphCount</td><td>The number of glyphs in this table.</td></tr>
+<tr><td>uint32</td><td>glyphOffsetsOffset</td><td>Offset to glyphOffsets table.</td></tr>
+<tr><td>uint32</td><td>fontGlyphCount</td><td>The number of "public" glyphs. Should match maxp::numGlyphs.</td></tr>
+<tr><td>uint32</td><td>reserved</td><td>Set to zero.</td></tr>
+</tbody>
+</table>
+
+<h2>glyphOffsets table</h2>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>uint32[glyphCount+1]</td><td>glyphOffsets</td><td>Like loca table, but without zero size meaning empty. Offset from beginning of glyphsOffsets table.</td></tr>
+</table>
+
+<h2>glyph</h2>
+The first bit is 0 for a simple glyph and 1 for a composite glyph.
+
+<h3>simpleGlyph</h3>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>uint16</td><td>type</td><td><code>0x00</code> for a simple glyph.</td></tr>
+<tr><td>uint16</td><td>axisCount</td><td>Number of axis used by this glyph.</td></tr>
+<tr><td>uint16</td><td>contourCount</td><td>Number of contours.</td></tr>
+<tr><td>uint16</td><td>quadCount</td><td>Number of quads.</td></tr>
+<tr><td>uint16[contourCount]</td><td>contourQuadCounts</td><td>Number or quads in each contour.</td></tr>
+<tr><td>uint8[quadCount]</td><td>quadOnPointIterpolationType</td>
+ <td>Method to convert a quad's (a,b) into an on curve point. With <sub>-1</sub> and <sub>+1</sub> denoting the previous and next of the contour.
+ <ol>
+  <li value="0">(x<sub>-1</sub>, y<sub>-1</sub>) + a * ((x, y) - (x<sub>-1</sub>, y<sub>-1</sub>)), with a clamped to the range [0, 1].</li>
+  <li value="1">(a, b)</li>
+  <li value="2">project (a, b) onto (and clamped to) the segment from (x<sub>-1</sub>, y<sub>-1</sub>) to (x, y)).</li>
+  <li value="3">project (a, b) and project (a<sub>+1</sub>, b<sub>+1</sub>) onto (and clamped to) the segment from (x<sub>-1</sub>, y<sub>-1</sub>) to (x<sub>+1</sub>, y<sub>+1</sub>).<br>Note: not known to be used, found by modifying font file data.</li>
+ </ol>
+ </td>
+</tr>
+<tr><td>u8[align8]</td><td>reserved, set to 0</td><td>Align following quads to 8 bytes.</td></tr>
+<tr><td>double[quadCount][4]</td><td>quads</td><td>((a, b), (x, y)) where (x, y) is the off curve point.</td></tr>
+<tr><td>double[axisCount][2][quadCount][4]</td><td>deltas</td><td>For each axis, for each region (<code>less</code> and <code>more</code>), a list of deltas for each quad value (applied before interpolation).</td></tr>
+</table>
+
+<h3>compositeGlyph</h3> 
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>uint16</td><td>type</td><td><code>0x01</code> for a composite glyph.</td></tr>
+<tr><td>uint16</td><td>axisCount</td><td>Number of axis used by this glyph.</td></tr>
+<tr><td>uint16</td><td>componentCount</td><td>Number of child components.</td></tr>
+<tr><td>uint16</td><td>flatComponentCount</td><td>Number of descendent components plus one.</td></tr>
+<tr><td>uint16</td><td>flatAxisCount</td><td>Number of axis used by self and descendents.</td></tr>
+<tr><td>uint16</td><td>maxRegionCount</td><td>Maxiumum axisCount of self or any descendent times two.</td></tr>
+<tr><td>uint16</td><td>axisValueConstantAdditionCount</td><td>Number of axis value constant additions. One or zero per descendent's axis.</td></tr>
+<tr><td>uint16</td><td>axisValueDeltaAdditionCount</td><td>Number of axis value delta additions. One or zero per descendent's axis per this component's regions.</td></tr>
+<tr><td>uint16</td><td>translationCount</td><td>Number of translations. One or zero per descendent.</td></tr>
+<tr><td>uint16</td><td>rotationCount</td><td>Number of rotations. One or zero per descendent.</td></tr>
+<tr><td>uint16</td><td>translationDeltasCount</td><td>Number of translation deltas. One or zero per descendent per this component's regions.</td></tr>
+<tr><td>uint16</td><td>rotationDeltasCount</td><td>Number of rotation deltas. One or zero per descendent per this component's regions.</td></tr>
+<tr><td>uint16</td><td>componentOffset</td><td>Offset/4 to components (from beginning of compositeGlyph).</td></tr>
+<tr><td>uint16</td><td>axisValueAdditionIndexesOffset</td><td>Offset/4 to axisValueAdditionsIndexes (from beginning of compositeGlyph).</td></tr>
+<tr><td>uint16</td><td>axisValueConstantAdditionOffset</td><td>Offset/4 to axisValueConstantAdditions (from beginning of compositeGlyph).</td></tr>
+<tr><td>uint16</td><td>axisValueDeltaAdditionOffset</td><td>Offset/4 to axisValueDeltaAdditions (from beginning of compositeGlyph).</td></tr>
+<tr><td>uint16</td><td>translationOffset</td><td>Offset/4 to translations (from beginning of compositeGlyph).</td></tr>
+<tr><td>uint16</td><td>rotationOffset</td><td>Offset/4 to rotations (from beginning of compositeGlyph).</td></tr>
+</table>
+
+<h4>components</h4>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>component[componentCount]</td><td>components</td><td>Array of component.</td></tr>
+</table>
+
+<h4>component</h4>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>uint32</td><td>glyphIndex</td><td>The glyph index of this component.</td></tr>
+<tr><td>uint16</td><td>flatComponentIndex</td><td>Count of all previous components (in this compositeGlyph) and their descendents.</td></tr>
+<tr><td>uint16</td><td>flatAxisIndex</td><td>Sum of axisCount of all previous components (in this compositeGlyph) and their descendents.</td></tr>
+</table>
+
+<h4>axisValueAdditionsIndexes</h4>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>uint16[axisCount*2+1]</td><td>regionOffsetsForDeltaIndexes</td><td>Like loca, a range of indexes into axisValueDeltaAdditions for each region. First value should be zero, last is axisValueDeltaAdditionCount.</td></tr>
+<tr><td>uint16[axisValueConstantAdditionCount]</td><td>axisValueConstantIndexes</td><td>Indexes into the axis values of all descendent components.</td></tr>
+<tr><td>uint16[axisValueDeltaAdditionCount]</td><td>axisValueDeltaIndexes</td><td>Indexes into the axis values of all descendent components.</td></tr>
+</table>
+
+<h4>axisValueConstantAdditions</h4>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>float[axisValueConstantAdditionCount]</td><td>constant</td><td>Value to add to an axis value.</td></tr>
+</table>
+<p>flatComponentAxis[axisValueConstantIndexes[n]] += constant[n]</p>
+
+<h4>axisValueDeltaAdditions</h4>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>float[axisValueDeltaAdditionCount]</td><td>regionScalarDelta</td><td>Value to multiply by a region scalar and add to an axis value.</td></tr>
+</table>
+<p>regionIndex = current index into regionOffsetsForDeltaIndexes</p>
+<p>flatComponentAxis[axisValueDeltaIndexes[n]] += regionScalarDelta[n] * regionScalar[regionIndex]</p>
+
+<h4>translations</h4>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>float[translationCount][2]</td><td>translation</td><td>(x, y)</td></tr>
+<tr><td>float[translationDeltasCount][2]</td><td>translationDeltas</td><td>(dx, dy)</td></tr>
+<tr><td>uint16[translationDeltasCount][2]</td><td>translationDeltasIndexes</td><td>(flatComponentIndex, regionIndex), sorted</td></tr>
+<tr><td>uint16[translationCount]</td><td>translationIndexes</td><td>flatComponentIndex, sorted</td></tr>
+</table>
+<p>translation[n] is applied to flatComponentTransforms[translationIndexes[n]]</p>
+<p>translationDeltas[m] * regionScalar[translationDeltasIndexes[m].regionIndex] is applied to flatComponentTransforms[translationDeltaIndexes[m].flatComponentIndex]</p>
+
+<h4>rotations</h4>
+<table>
+<tr><th>Type</th><th>Name</th><th>Description</th></tr>
+<tr><td>float[rotationCount]</td><td>rotation</td><td>Angle in radians.</td></tr>
+<tr><td>float[rotationDeltasCount]</td><td>rotationDeltas</td><td>Angle delta in radians.</td></tr>
+<tr><td>uint16[rotationDeltasCount][2]</td><td>rotationDeltasIndexes</td><td>(flatComponentIndex, regionIndex), sorted</td></tr>
+<tr><td>uint16[rotationCount]</td><td>rotationIndexes</td><td>flatComponentIndex, sorted</td></tr>
+</table>
+<p>rotation[n] is applied to flatComponentTransforms[rotationIndexes[n]]</p>
+<p>rotationDeltas[m] * regionScalar[rotationDeltasIndexes[m].regionIndex] is applied to flatComponentTransforms[rotationDeltaIndexes[m].flatComponentIndex]</p>
+
+<h4>Applying translations and rotations</h4>
+<p>
+The translation T, rotation R, translationDeltas TD[r], or rotationDeltas RD[r]
+targeting a given flatComponentIndex (component), are accumulated A as
+A = T*R*TD[0]*RD[0]*TD[1]*RD[1]*...*TD[r]*RD[r].
+This is applied to flatComponentTransforms[flatComponentIndex] (the component's matrix) M as M = A*M.
+The current composite's matrix C is applied as M = C*M.
+</p>
